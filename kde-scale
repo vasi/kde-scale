@@ -4,6 +4,10 @@ require 'json'
 require 'open3'
 require 'optparse'
 
+# Display Configuration's UI limits, not per-display capabilities:
+# https://github.com/KDE/kscreen/blob/v6.8.2/kcm/ui/OutputPanel.qml#L95-L118
+SCALE_RANGE = (0.5..3.0).freeze
+
 def parse_options(argv)
   options = { osd: true }
   values = []
@@ -97,7 +101,13 @@ end
 def target_scale(current, change)
   amount = Float(change) / 100
   desired = (change.start_with?('+', '-') ? current + amount : amount).round(6)
-  raise 'The resulting scale must be finite and greater than zero' unless desired.finite? && desired.positive?
+  unless desired.finite? && SCALE_RANGE.cover?(desired)
+    message = "The resulting scale must be between #{percent(SCALE_RANGE.begin)} and #{percent(SCALE_RANGE.end)} (requested #{percent(desired)})"
+    if !change.start_with?('+', '-') && amount.positive? && desired < SCALE_RANGE.begin
+      message += ". Use +#{change} for a relative increase"
+    end
+    raise message
+  end
   desired
 end
 

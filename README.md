@@ -49,6 +49,11 @@ than one display is enabled.
 
 Scale values are percentages. Signed values adjust the current scale: `+10`
 changes 175% to 185%, and `-5` changes 175% to 170%.
+The resulting scale must be within **50%–300%**, matching Plasma 6.8's Display
+Configuration controls. Both absolute values and relative adjustments are checked
+before applying anything. These are fixed UI limits; `kscreen-doctor` does not
+expose them as per-display properties.
+
 Decimal values and an optional trailing `%` are accepted. KDE decides which
 scales the hardware supports and may round the result; the script reads back
 the applied scale for verification and the OSD. Changes take effect immediately,
@@ -57,8 +62,12 @@ restore it.
 
 Implementation references:
 
+- [Display Configuration's scaling limits (Plasma 6.8.2)](https://github.com/KDE/kscreen/blob/v6.8.2/kcm/ui/OutputPanel.qml#L95-L118)
 - [KScreen command implementation](https://github.com/KDE/libkscreen/blob/master/src/doctor/doctor.cpp)
 - [KWin active output D-Bus method](https://github.com/KDE/kwin/blob/master/src/dbusinterface.cpp)
 - [KWin pointer movement handling](https://github.com/KDE/kwin/blob/master/src/pointer_input.cpp)
 - [KWin window activation handling](https://github.com/KDE/kwin/blob/master/src/activation.cpp)
 - [Plasma OSD service](https://github.com/KDE/plasma-workspace/blob/master/shell/osd.h)
+
+Run the scaling-limit regression checks with `ruby test/scale_limits.rb`. These
+use a simulated display backend and do not change your display settings.
