@@ -31,6 +31,10 @@ cases = [
    { 'DP-1' => [0, 0], 'eDP-1' => [634, 1543] }],
   ['output ordering', [bottom, top], 'DP-1', '135',
    { 'DP-1' => [0, 0], 'eDP-1' => [634, 1600] }],
+  ['IDs change between commands', [top, bottom], 'DP-1', '135',
+   { 'DP-1' => [0, 0], 'eDP-1' => [634, 1600] }, true],
+  ['numeric selection with changing IDs', [top, bottom], '1', '135',
+   { 'DP-1' => [0, 0], 'eDP-1' => [634, 1600] }, true],
   ['left display, scale down', [top, right], 'DP-1', '135',
    { 'DP-1' => [0, 0], 'eDP-1' => [2845, 0] }],
   ['left display, scale up', [top, right], 'DP-1', '145',
@@ -65,9 +69,15 @@ Dir.mktmpdir('kde-scale-layout') do |dir|
       puts JSON.generate(config)
     else
       File.open(ENV.fetch('SCALE_TEST_CALLS'), 'a') { |file| file.puts JSON.generate(ARGV) }
+      if ENV['SCALE_TEST_RENUMBER'] == '1'
+        ids = config.fetch('outputs').map { |item| item.fetch('id') }.reverse
+        config.fetch('outputs').zip(ids) { |item, id| item['id'] = id }
+      end
       ARGV.each do |argument|
-        _, id, setting, value = argument.split('.', 4)
-        output = config.fetch('outputs').find { |item| item.fetch('id') == Integer(id) }
+        _, query, setting, value = argument.split('.', 4)
+        output = config.fetch('outputs').find { |item| item.fetch('name') == query } ||
+                 config.fetch('outputs').find { |item| item.fetch('id').to_s == query }
+        abort "Unknown output: #{query}" unless output
         case setting
         when 'scale'
           output['scale'] = (Float(value) * 120).round / 120.0
@@ -86,10 +96,11 @@ Dir.mktmpdir('kde-scale-layout') do |dir|
   env = { 'PATH' => dir, 'XDG_SESSION_TYPE' => 'wayland',
           'SCALE_TEST_STATE' => state, 'SCALE_TEST_CALLS' => calls }
 
-  cases.each do |label, displays, target, scale, expected|
+  cases.each do |label, displays, target, scale, expected, renumber|
     File.delete(calls) if File.exist?(calls)
     File.write(state, JSON.generate('outputs' => displays))
-    stdout, stderr, status = Open3.capture3(env, RbConfig.ruby, script, '--no-osd', '--output', target, scale)
+    run_env = env.merge('SCALE_TEST_RENUMBER' => renumber ? '1' : '0')
+    stdout, stderr, status = Open3.capture3(run_env, RbConfig.ruby, script, '--no-osd', '--output', target, scale)
     raise "#{label}: #{stderr}" unless status.success?
     raise "#{label}: unexpected output" unless stdout.empty? && stderr.empty?
     applied = JSON.parse(File.read(state)).fetch('outputs')
@@ -98,13 +109,14 @@ Dir.mktmpdir('kde-scale-layout') do |dir|
     invocations = File.readlines(calls).map { |line| JSON.parse(line) }
     raise "#{label}: scale and layout were applied separately" unless invocations.length == 1
     setters = invocations.first
-    selected = applied.find { |item| item.fetch('name') == target }
+    selected_name = displays.find { |item| item.fetch('name') == target || item.fetch('id').to_s == target }.fetch('name')
+    selected = applied.find { |item| item.fetch('name') == selected_name }
     expected_scale = (Float(scale) / 100 * 120).round / 120.0
     raise "#{label}: incorrect target scale" unless selected.fetch('scale') == expected_scale
     raise "#{label}: missing scale command" unless setters.count { |arg| arg.include?('.scale.') } == 1
     applied.each do |item|
       original = displays.find { |old| old.fetch('name') == item.fetch('name') }
-      raise "#{label}: changed another display's scale" unless item.fetch('name') == target || item.fetch('scale') == original.fetch('scale')
+      raise "#{label}: changed another display's scale" unless item.fetch('name') == selected_name || item.fetch('scale') == original.fetch('scale')
     end
   end
 

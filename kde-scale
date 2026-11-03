@@ -150,15 +150,14 @@ end
 def apply_scale(doctor, displays, display, desired)
   # KWin uses 1/120 increments. Send that scale so the planned sizes match it.
   desired = (desired * 120).round / 120.0
-  id = Integer(display.fetch('id'))
   name = display.fetch('name')
   positions = layout_positions(displays, display, desired)
-  commands = ["output.#{id}.scale.#{desired}"]
+  commands = ["output.#{name}.scale.#{desired}"]
   displays.each do |other|
     position = positions[other.fetch('name')]
     next if position.nil? || position == other.fetch('pos').values_at('x', 'y')
 
-    commands << "output.#{Integer(other.fetch('id'))}.position.#{position.join(',')}"
+    commands << "output.#{other.fetch('name')}.position.#{position.join(',')}"
   end
   # Apply scale and positions together: never expose a temporary gap or overlap.
   capture(doctor, *commands)

@@ -64,7 +64,7 @@ Dir.mktmpdir('kde-scale-limits') do |dir|
       raise "#{argument}: unexpected output" unless stdout.empty? && stderr.empty?
       raise "#{argument}: incorrect applied scale #{actual}" unless actual == expected
       setters = File.readlines(calls).map { |line| JSON.parse(line) }
-      raise "#{argument}: expected exactly one scale change" unless setters == [["output.1.scale.#{expected}"]]
+      raise "#{argument}: expected exactly one scale change" unless setters == [["output.eDP-1.scale.#{expected}"]]
     else
       raise "#{argument}: invalid scale accepted" if status.success?
       raise "#{argument}: missing range error" unless stderr.include?('between 50% and 300%')
