@@ -5,19 +5,21 @@ require 'open3'
 require 'shellwords'
 
 HELP = <<~TEXT
-  Usage: kde-scale [--dry-run] [--output NAME|ID] [PERCENT|+POINTS|-POINTS]
+  Usage: kde-scale [--no-osd] [--dry-run] [--output NAME|ID] [PERCENT|+POINTS|-POINTS]
 
   kde-scale 200             Set the current display to 200%
   kde-scale +10             Add 10 percentage points (175% -> 185%)
   kde-scale -5              Subtract 5 percentage points
   kde-scale                Show the current display's scale
   kde-scale --dry-run +10   Preview the change
+  kde-scale --no-osd +10    Change scale without the on-screen display
   kde-scale --output DP-1 150
 
   Requires KDE Plasma on Wayland, kscreen-doctor, and a qdbus executable
   (qdbus6, qdbus-qt6, or qdbus). Use kscreen-doctor -o to list outputs.
   The default is KWin's active output: pointer movement and window activation
-  both update it. With only one enabled display, qdbus is optional.
+  both update it. With only one enabled display, qdbus is optional for scaling.
+  Successful changes show Plasma's native OSD unless --no-osd is specified.
 TEXT
 
 def executable(name)
@@ -45,10 +47,21 @@ def percent(scale)
   format('%.4f', scale * 100).sub(/\.?0+\z/, '') + '%'
 end
 
+def show_osd(qdbus, name, scale)
+  raise 'qdbus was not found in PATH' unless qdbus
+
+  capture(qdbus, 'org.kde.plasmashell', '/org/kde/osdService',
+          'org.kde.osdService.showText', 'video-display', "#{name} · #{percent(scale)}")
+rescue RuntimeError, SystemCallError => error
+  # Feedback is best-effort: an OSD failure must not fail a successful change.
+  warn "kde-scale: OSD unavailable: #{error.message} (use --no-osd to suppress)"
+end
+
 begin
   target = nil
   change = nil
   dry_run = false
+  osd = true
   until ARGV.empty?
     arg = ARGV.shift
     case arg
@@ -57,6 +70,8 @@ begin
       exit
     when '--dry-run'
       dry_run = true
+    when '--no-osd'
+      osd = false
     when '--output'
       target = ARGV.shift
       raise '--output requires a display name or ID' if target.nil? || target.start_with?('-')
@@ -75,8 +90,8 @@ begin
   displays = outputs(doctor)
   raise 'No connected, enabled displays found; run this inside your KDE session' if displays.empty?
 
+  qdbus = %w[qdbus6 qdbus-qt6 qdbus].filter_map { |name| executable(name) }.first
   unless target
-    qdbus = %w[qdbus6 qdbus-qt6 qdbus].filter_map { |name| executable(name) }.first
     begin
       target = capture(qdbus, 'org.kde.KWin', '/KWin', 'org.kde.KWin.activeOutputName').strip if qdbus
     rescue RuntimeError => error
@@ -113,6 +128,7 @@ begin
     if (actual - desired).abs > 0.01
       raise 'KDE did not apply the requested scale; check Display Configuration'
     end
+    show_osd(qdbus, name, actual) if osd
   end
 rescue RuntimeError, SystemCallError, JSON::ParserError, KeyError, ArgumentError, TypeError => error
   warn "kde-scale: #{error.message}"
