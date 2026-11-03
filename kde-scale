@@ -16,22 +16,15 @@ def parse_options(argv)
     end
     opts.on('--dry-run', 'Preview the change without applying it') { options[:dry_run] = true }
     opts.on('--[no-]osd', 'Show Plasma OSD (default: enabled)') { |enabled| options[:osd] = enabled }
-    # Numeric switches let bare negative adjustments coexist with normal options.
-    opts.on('-[0-9]POINTS', 'Subtract percentage points, e.g. -5') { |value| values << "-#{value}" }
+    # Accept bare negative adjustments, but omit this parser rule from help.
+    opts.define('-[0-9]POINTS') { |value| values << "-#{value}" }.short.clear
     opts.on('-h', '--help', 'Show this help') { puts opts; exit }
     opts.separator <<~TEXT
 
       Examples:
-        kde-scale 200            Set the current display to 200%
-        kde-scale +10            Add 10 percentage points (175% -> 185%)
-        kde-scale -5             Subtract 5 percentage points
-        kde-scale                Show the current display's scale
-        kde-scale --no-osd +10    Change scale without the OSD
-
-      Requires KDE Plasma on Wayland and kscreen-doctor. OSD and automatic
-      multi-display selection require qdbus6, qdbus-qt6, or qdbus.
-      The default display follows KWin's active output (pointer movement and
-      window activation). Use kscreen-doctor -o to list outputs.
+        kde-scale 200    Set scaling to 200%
+        kde-scale +10    Add 10 percentage points
+        kde-scale -5     Subtract 5 percentage points
     TEXT
   end
   parser.order!(argv) { |value| values << value }
