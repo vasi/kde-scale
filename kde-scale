@@ -5,14 +5,14 @@ require 'open3'
 require 'shellwords'
 
 HELP = <<~TEXT
-  Usage: scale-display [--dry-run] [--output NAME|ID] [PERCENT|+POINTS|-POINTS]
+  Usage: kde-scale [--dry-run] [--output NAME|ID] [PERCENT|+POINTS|-POINTS]
 
-  scale-display 200             Set the current display to 200%
-  scale-display +10             Add 10 percentage points (175% -> 185%)
-  scale-display -5              Subtract 5 percentage points
-  scale-display                Show the current display's scale
-  scale-display --dry-run +10   Preview the change
-  scale-display --output DP-1 150
+  kde-scale 200             Set the current display to 200%
+  kde-scale +10             Add 10 percentage points (175% -> 185%)
+  kde-scale -5              Subtract 5 percentage points
+  kde-scale                Show the current display's scale
+  kde-scale --dry-run +10   Preview the change
+  kde-scale --output DP-1 150
 
   Requires KDE Plasma on Wayland, kscreen-doctor, and a qdbus executable
   (qdbus6, qdbus-qt6, or qdbus). Use kscreen-doctor -o to list outputs.
@@ -115,6 +115,6 @@ begin
     end
   end
 rescue RuntimeError, SystemCallError, JSON::ParserError, KeyError, ArgumentError, TypeError => error
-  warn "scale-display: #{error.message}"
+  warn "kde-scale: #{error.message}"
   exit 1
 end

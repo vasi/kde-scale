@@ -1,4 +1,4 @@
-# scale-display
+# kde-scale
 
 A standalone Ruby script for KDE Plasma on Wayland. Uses Ruby's standard library,
 `kscreen-doctor`, and `qdbus6`, `qdbus-qt6`, or `qdbus` (whichever is installed).
@@ -7,12 +7,12 @@ No gems are needed. With one enabled display, qdbus is optional.
 Run from this directory:
 
 ```sh
-./scale-display          # Show the current display and percentage
-./scale-display 200      # Set to 200%
-./scale-display +10      # 175% becomes 185%
-./scale-display -5       # 175% becomes 170%
-./scale-display --dry-run +10
-./scale-display --output eDP-1 150
+./kde-scale          # Show the current display and percentage
+./kde-scale 200      # Set to 200%
+./kde-scale +10      # 175% becomes 185%
+./kde-scale -5       # 175% becomes 170%
+./kde-scale --dry-run +10
+./kde-scale --output eDP-1 150
 kscreen-doctor -o        # List display names and IDs
 ```
 
@@ -21,7 +21,7 @@ for example (run from this directory):
 
 ```sh
 mkdir -p "$HOME/.local/bin"
-install -m 755 ./scale-display "$HOME/.local/bin/scale-display"
+install -m 755 ./kde-scale "$HOME/.local/bin/kde-scale"
 ```
 
 Make sure `$HOME/.local/bin` is on your PATH. KDE keyboard shortcuts can use the
