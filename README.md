@@ -47,7 +47,8 @@ without moving the pointer. Use `--output NAME` to select a specific monitor.
 On older KDE versions without this D-Bus method, use `--output NAME` when more
 than one display is enabled.
 
-Scale values are percentages; signed values add/subtract percentage points.
+Scale values are percentages. Signed values adjust the current scale: `+10`
+changes 175% to 185%, and `-5` changes 175% to 170%.
 Decimal values and an optional trailing `%` are accepted. KDE decides which
 scales the hardware supports and may round the result; the script reads back
 and prints the applied scale. Changes take effect immediately, with no automatic

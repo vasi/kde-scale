@@ -10,7 +10,7 @@ def parse_options(argv)
   values = []
   help = nil
   parser = OptionParser.new do |opts|
-    opts.banner = 'Usage: kde-scale [options] [PERCENT|+POINTS|-POINTS]'
+    opts.banner = 'Usage: kde-scale [options] [PERCENT|+PERCENT|-PERCENT]'
     opts.on('--output NAME', 'Select a display by name or ID') do |name|
       raise OptionParser::InvalidArgument, 'output must be a display name or ID' if name.empty? || name.start_with?('-')
       options[:output] = name
@@ -22,13 +22,13 @@ def parse_options(argv)
 
       Examples:
         kde-scale 200    Set scaling to 200%
-        kde-scale +10    Add 10 percentage points
-        kde-scale -5     Subtract 5 percentage points
+        kde-scale +10    Increase scaling by 10%
+        kde-scale -5     Decrease scaling by 5%
     TEXT
   end
   # Generate help from user-facing options before adding the numeric parser rule.
   help = parser.to_s
-  parser.on('-[0-9]POINTS') { |value| values << "-#{value}" }
+  parser.on('-[0-9]PERCENT') { |value| values << "-#{value}" }
   parser.order!(argv) { |value| values << value }
   values.concat(argv) # Arguments after an explicit -- are positional too.
   raise OptionParser::InvalidArgument, 'specify just one scale or adjustment' if values.size > 1
