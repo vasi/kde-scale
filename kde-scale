@@ -72,42 +72,38 @@ rescue RuntimeError, SystemCallError => error
   warn "kde-scale: OSD unavailable: #{error.message} (use --no-osd to suppress)"
 end
 
-begin
-  options = parse_options(ARGV)
-  target = options[:output]
-  change = options[:change]
-
-  if ENV['XDG_SESSION_TYPE'] == 'x11'
-    raise 'Per-display fractional scaling requires a KDE Wayland session'
+def active_display_name(displays, qdbus)
+  name = nil
+  begin
+    name = capture(qdbus, 'org.kde.KWin', '/KWin', 'org.kde.KWin.activeOutputName').strip if qdbus
+  rescue RuntimeError => error
+    raise "#{error.message}\nUse --output NAME to select a display" unless displays.one?
   end
-  doctor = executable('kscreen-doctor') or raise 'kscreen-doctor was not found in PATH'
+  name = displays.first.fetch('name') if displays.one? && (name.nil? || name.empty?)
+  raise 'Cannot detect the active display; install qdbus6 or use --output NAME' if name.nil? || name.empty?
+  name
+end
+
+def select_display(doctor, qdbus, target)
   displays = outputs(doctor)
   raise 'No connected, enabled displays found; run this inside your KDE session' if displays.empty?
 
-  qdbus = %w[qdbus6 qdbus-qt6 qdbus].filter_map { |name| executable(name) }.first
-  unless target
-    begin
-      target = capture(qdbus, 'org.kde.KWin', '/KWin', 'org.kde.KWin.activeOutputName').strip if qdbus
-    rescue RuntimeError => error
-      raise "#{error.message}\nUse --output NAME to select a display" unless displays.one?
-    end
-    target = displays.first.fetch('name') if displays.one? && (target.nil? || target.empty?)
-    raise 'Cannot detect the active display; install qdbus6 or use --output NAME' if target.nil? || target.empty?
-  end
+  target ||= active_display_name(displays, qdbus)
   display = displays.find { |item| item['name'] == target || item['id'].to_s == target }
   raise "No enabled display matches #{target.inspect}; list them with kscreen-doctor -o" unless display
-  current = Float(display.fetch('scale'))
-  raise 'KScreen returned an invalid current scale' unless current.finite? && current.positive?
-  name = display.fetch('name')
-  unless change
-    puts "#{name}: #{percent(current)}"
-    exit
-  end
+  display
+end
 
+def target_scale(current, change)
   amount = Float(change) / 100
   desired = (change.start_with?('+', '-') ? current + amount : amount).round(6)
   raise 'The resulting scale must be finite and greater than zero' unless desired.finite? && desired.positive?
+  desired
+end
+
+def apply_scale(doctor, display, desired)
   id = Integer(display.fetch('id'))
+  name = display.fetch('name')
   capture(doctor, "output.#{id}.scale.#{desired}")
   # Read the compositor's actual value, including any rounding it applies.
   updated = outputs(doctor).find { |item| item['name'] == name }
@@ -116,7 +112,32 @@ begin
   if (actual - desired).abs > 0.01
     raise 'KDE did not apply the requested scale; check Display Configuration'
   end
-  show_osd(qdbus, name, actual) if options[:osd]
+  actual
+end
+
+def main(argv)
+  options = parse_options(argv)
+  if ENV['XDG_SESSION_TYPE'] == 'x11'
+    raise 'Per-display fractional scaling requires a KDE Wayland session'
+  end
+  doctor = executable('kscreen-doctor') or raise 'kscreen-doctor was not found in PATH'
+  qdbus = %w[qdbus6 qdbus-qt6 qdbus].filter_map { |name| executable(name) }.first
+  display = select_display(doctor, qdbus, options[:output])
+  current = Float(display.fetch('scale'))
+  raise 'KScreen returned an invalid current scale' unless current.finite? && current.positive?
+
+  unless options[:change]
+    puts "#{display.fetch('name')}: #{percent(current)}"
+    return
+  end
+
+  desired = target_scale(current, options[:change])
+  actual = apply_scale(doctor, display, desired)
+  show_osd(qdbus, display.fetch('name'), actual) if options[:osd]
+end
+
+begin
+  main(ARGV)
 rescue OptionParser::ParseError => error
   warn "kde-scale: #{error.message}\nRun kde-scale --help for usage"
   exit 1
