@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# Copyright (c) 2026 Dave Vasilevsky
+# SPDX-License-Identifier: BSD-2-Clause
 # End-to-end range checks using an isolated, simulated kscreen-doctor.
 require 'json'
 require 'open3'

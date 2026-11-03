@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# Copyright (c) 2026 Dave Vasilevsky
+# SPDX-License-Identifier: BSD-2-Clause
 # KDE Plasma / Wayland display scaling. Only Ruby's standard library is needed.
 require 'json'
 require 'open3'

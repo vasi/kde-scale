@@ -1,73 +1,42 @@
 # kde-scale
 
-A standalone Ruby script for KDE Plasma on Wayland. Uses Ruby's standard library,
-`kscreen-doctor`, and `qdbus6`, `qdbus-qt6`, or `qdbus` (whichever is installed).
-No gems are needed. With one enabled display, qdbus is optional for scaling;
-the on-screen display requires it.
-Command-line options and help are handled by Ruby's standard-library `OptionParser`.
+Make your KDE desktop larger or smaller with a quick command or keyboard
+shortcut. Adjust the active display's scaling with feedback from Plasma's
+native on-screen display.
 
-Run from this directory:
+## Usage
 
 ```sh
-./kde-scale          # Show the current display and percentage
-./kde-scale 200      # Set to 200%
-./kde-scale +10      # 175% becomes 185%
-./kde-scale -5       # 175% becomes 170%
-./kde-scale --no-osd +10  # Change scale without the on-screen display
-./kde-scale --output eDP-1 150
-./kde-scale --help   # Show all options
-kscreen-doctor -o        # List display names and IDs
+kde-scale 200   # Set scaling to 200%
+kde-scale +10   # Increase scaling: 175% → 185%
+kde-scale -5    # Decrease scaling: 175% → 170%
 ```
 
-To make the command available everywhere, copy it to a directory on your PATH,
-for example (run from this directory):
+Run `kde-scale` to see the current scale, or `kde-scale --help` for options.
+Scaling is limited to 50%–300%.
+
+## Installation
+
+Make sure you have KDE Plasma on Wayland, Ruby, `kscreen-doctor` (KScreen), and
+a Qt 6 `qdbus` command (`qdbus6`, `qdbus-qt6`, or `qdbus`) installed. No gems
+are needed.
+
+Make the script executable, then put it in a directory on your `PATH`:
 
 ```sh
-mkdir -p "$HOME/.local/bin"
-install -m 755 ./kde-scale "$HOME/.local/bin/kde-scale"
+chmod +x kde-scale
 ```
 
-Make sure `$HOME/.local/bin` is on your PATH. KDE keyboard shortcuts can use the
-full installed path followed by `+10` or `-5`.
+## AI involvement
 
-After each successful scale change, Plasma's native on-screen display (OSD)
-shows a monitor icon and the display name and applied percentage, for example
-`eDP-1 · 185%`. Use `--no-osd` to suppress it. Successful changes print nothing;
-running without arguments prints the current scale without showing an OSD.
-If the OSD service or qdbus is unavailable, the script warns without failing
-the scale command. Plasma controls the OSD's styling, timeout, and placement;
-it may appear on a different monitor from an explicitly
-selected `--output`.
+[AI Influence Level: AIL 4](https://danielmiessler.com/blog/ai-influence-level-ail)
+— AI created, human basic idea.
 
-The default display comes from KWin's `org.kde.KWin.activeOutputName` D-Bus
-method. Pointer movement updates that output, as does window activation, so
-moving the pointer onto a monitor immediately before invoking a shortcut targets
-that monitor. Keyboard focus changes across monitors can change the selection
-without moving the pointer. Use `--output NAME` to select a specific monitor.
-On older KDE versions without this D-Bus method, use `--output NAME` when more
-than one display is enabled.
+Codex wrote the implementation, tests, and documentation. The author supplied
+the requirements, reviewed the changes, and guided revisions.
 
-Scale values are percentages. Signed values adjust the current scale: `+10`
-changes 175% to 185%, and `-5` changes 175% to 170%.
-The resulting scale must be within **50%–300%**, matching Plasma 6.8's Display
-Configuration controls. Both absolute values and relative adjustments are checked
-before applying anything. These are fixed UI limits; `kscreen-doctor` does not
-expose them as per-display properties.
+## Copyright and license
 
-Decimal values and an optional trailing `%` are accepted. KDE decides which
-scales the hardware supports and may round the result; the script reads back
-the applied scale for verification and the OSD. Changes take effect immediately,
-with no automatic revert timer. Run the command with the previous percentage to
-restore it.
+Copyright © 2026 Dave Vasilevsky.
 
-Implementation references:
-
-- [Display Configuration's scaling limits (Plasma 6.8.2)](https://github.com/KDE/kscreen/blob/v6.8.2/kcm/ui/OutputPanel.qml#L95-L118)
-- [KScreen command implementation](https://github.com/KDE/libkscreen/blob/master/src/doctor/doctor.cpp)
-- [KWin active output D-Bus method](https://github.com/KDE/kwin/blob/master/src/dbusinterface.cpp)
-- [KWin pointer movement handling](https://github.com/KDE/kwin/blob/master/src/pointer_input.cpp)
-- [KWin window activation handling](https://github.com/KDE/kwin/blob/master/src/activation.cpp)
-- [Plasma OSD service](https://github.com/KDE/plasma-workspace/blob/master/shell/osd.h)
-
-Run the scaling-limit regression checks with `ruby test/scale_limits.rb`. These
-use a simulated display backend and do not change your display settings.
+Licensed under the [BSD 2-Clause License](LICENSE).
