@@ -1,0 +1,120 @@
+#!/usr/bin/env ruby
+# KDE Plasma / Wayland display scaling. Only Ruby's standard library is needed.
+require 'json'
+require 'open3'
+require 'shellwords'
+
+HELP = <<~TEXT
+  Usage: scale-display [--dry-run] [--output NAME|ID] [PERCENT|+POINTS|-POINTS]
+
+  scale-display 200             Set the current display to 200%
+  scale-display +10             Add 10 percentage points (175% -> 185%)
+  scale-display -5              Subtract 5 percentage points
+  scale-display                Show the current display's scale
+  scale-display --dry-run +10   Preview the change
+  scale-display --output DP-1 150
+
+  Requires KDE Plasma on Wayland, kscreen-doctor, and a qdbus executable
+  (qdbus6, qdbus-qt6, or qdbus). Use kscreen-doctor -o to list outputs.
+  The default is KWin's active output: pointer movement and window activation
+  both update it. With only one enabled display, qdbus is optional.
+TEXT
+
+def executable(name)
+  ENV.fetch('PATH', '').split(File::PATH_SEPARATOR).map { |dir| File.join(dir, name) }
+     .find { |path| File.file?(path) && File.executable?(path) }
+end
+
+def capture(*command)
+  stdout, stderr, status = Open3.capture3(*command)
+  unless status.success?
+    detail = [stderr.strip, stdout.strip].reject(&:empty?).join("\n")
+    raise "#{File.basename(command.first)} failed#{detail.empty? ? '' : ": #{detail}"}"
+  end
+  stdout
+end
+
+def outputs(doctor)
+  JSON.parse(capture(doctor, '-j')).fetch('outputs').select do |output|
+    # KScreen omits 'enabled' for outputs that cannot be disabled.
+    output['connected'] && output.fetch('enabled', true)
+  end
+end
+
+def percent(scale)
+  format('%.4f', scale * 100).sub(/\.?0+\z/, '') + '%'
+end
+
+begin
+  target = nil
+  change = nil
+  dry_run = false
+  until ARGV.empty?
+    arg = ARGV.shift
+    case arg
+    when '-h', '--help'
+      puts HELP
+      exit
+    when '--dry-run'
+      dry_run = true
+    when '--output'
+      target = ARGV.shift
+      raise '--output requires a display name or ID' if target.nil? || target.start_with?('-')
+    when /\A[+-]?\d+(?:\.\d+)?%?\z/
+      raise 'Specify just one scale or adjustment' if change
+      change = arg.delete_suffix('%')
+    else
+      raise "Unknown argument: #{arg}\n#{HELP}"
+    end
+  end
+
+  if ENV['XDG_SESSION_TYPE'] == 'x11'
+    raise 'Per-display fractional scaling requires a KDE Wayland session'
+  end
+  doctor = executable('kscreen-doctor') or raise 'kscreen-doctor was not found in PATH'
+  displays = outputs(doctor)
+  raise 'No connected, enabled displays found; run this inside your KDE session' if displays.empty?
+
+  unless target
+    qdbus = %w[qdbus6 qdbus-qt6 qdbus].filter_map { |name| executable(name) }.first
+    begin
+      target = capture(qdbus, 'org.kde.KWin', '/KWin', 'org.kde.KWin.activeOutputName').strip if qdbus
+    rescue RuntimeError => error
+      raise "#{error.message}\nUse --output NAME to select a display" unless displays.one?
+    end
+    target = displays.first.fetch('name') if displays.one? && (target.nil? || target.empty?)
+    raise 'Cannot detect the active display; install qdbus6 or use --output NAME' if target.nil? || target.empty?
+  end
+  display = displays.find { |item| item['name'] == target || item['id'].to_s == target }
+  raise "No enabled display matches #{target.inspect}; list them with kscreen-doctor -o" unless display
+  current = Float(display.fetch('scale'))
+  raise 'KScreen returned an invalid current scale' unless current.finite? && current.positive?
+  name = display.fetch('name')
+  unless change
+    puts "#{name}: #{percent(current)}"
+    exit
+  end
+
+  amount = Float(change) / 100
+  desired = (change.start_with?('+', '-') ? current + amount : amount).round(6)
+  raise 'The resulting scale must be finite and greater than zero' unless desired.finite? && desired.positive?
+  id = Integer(display.fetch('id'))
+  command = [doctor, "output.#{id}.scale.#{desired}"]
+  if dry_run
+    puts "#{name}: #{percent(current)} -> #{percent(desired)}"
+    puts Shellwords.join(command)
+  else
+    capture(*command)
+    # Report the compositor's actual value, including any rounding it applies.
+    updated = outputs(doctor).find { |item| item['name'] == name }
+    raise "#{name} disappeared while applying the change" unless updated
+    actual = Float(updated.fetch('scale'))
+    puts "#{name}: #{percent(current)} -> #{percent(actual)} (requested #{percent(desired)})"
+    if (actual - desired).abs > 0.01
+      raise 'KDE did not apply the requested scale; check Display Configuration'
+    end
+  end
+rescue RuntimeError, SystemCallError, JSON::ParserError, KeyError, ArgumentError, TypeError => error
+  warn "scale-display: #{error.message}"
+  exit 1
+end
