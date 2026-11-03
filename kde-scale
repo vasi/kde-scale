@@ -3,10 +3,9 @@
 require 'json'
 require 'open3'
 require 'optparse'
-require 'shellwords'
 
 def parse_options(argv)
-  options = { osd: true, dry_run: false }
+  options = { osd: true }
   values = []
   help = nil
   parser = OptionParser.new do |opts|
@@ -15,7 +14,6 @@ def parse_options(argv)
       raise OptionParser::InvalidArgument, 'output must be a display name or ID' if name.empty? || name.start_with?('-')
       options[:output] = name
     end
-    opts.on('--dry-run', 'Preview the change without applying it') { options[:dry_run] = true }
     opts.on('--[no-]osd', 'Show Plasma OSD (default: enabled)') { |enabled| options[:osd] = enabled }
     opts.on('-h', '--help', 'Show this help') { puts help; exit }
     opts.separator <<~TEXT
@@ -110,22 +108,15 @@ begin
   desired = (change.start_with?('+', '-') ? current + amount : amount).round(6)
   raise 'The resulting scale must be finite and greater than zero' unless desired.finite? && desired.positive?
   id = Integer(display.fetch('id'))
-  command = [doctor, "output.#{id}.scale.#{desired}"]
-  if options[:dry_run]
-    puts "#{name}: #{percent(current)} -> #{percent(desired)}"
-    puts Shellwords.join(command)
-  else
-    capture(*command)
-    # Report the compositor's actual value, including any rounding it applies.
-    updated = outputs(doctor).find { |item| item['name'] == name }
-    raise "#{name} disappeared while applying the change" unless updated
-    actual = Float(updated.fetch('scale'))
-    puts "#{name}: #{percent(current)} -> #{percent(actual)} (requested #{percent(desired)})"
-    if (actual - desired).abs > 0.01
-      raise 'KDE did not apply the requested scale; check Display Configuration'
-    end
-    show_osd(qdbus, name, actual) if options[:osd]
+  capture(doctor, "output.#{id}.scale.#{desired}")
+  # Read the compositor's actual value, including any rounding it applies.
+  updated = outputs(doctor).find { |item| item['name'] == name }
+  raise "#{name} disappeared while applying the change" unless updated
+  actual = Float(updated.fetch('scale'))
+  if (actual - desired).abs > 0.01
+    raise 'KDE did not apply the requested scale; check Display Configuration'
   end
+  show_osd(qdbus, name, actual) if options[:osd]
 rescue OptionParser::ParseError => error
   warn "kde-scale: #{error.message}\nRun kde-scale --help for usage"
   exit 1

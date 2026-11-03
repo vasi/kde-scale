@@ -13,7 +13,6 @@ Run from this directory:
 ./kde-scale 200      # Set to 200%
 ./kde-scale +10      # 175% becomes 185%
 ./kde-scale -5       # 175% becomes 170%
-./kde-scale --dry-run +10
 ./kde-scale --no-osd +10  # Change scale without the on-screen display
 ./kde-scale --output eDP-1 150
 ./kde-scale --help   # Show all options
@@ -33,10 +32,11 @@ full installed path followed by `+10` or `-5`.
 
 After each successful scale change, Plasma's native on-screen display (OSD)
 shows a monitor icon and the display name and applied percentage, for example
-`eDP-1 · 185%`. Use `--no-osd` to suppress it. Status queries and `--dry-run`
-do not show an OSD. If the OSD service or qdbus is unavailable, the script warns
-and still reports a successful scale change. Plasma controls the OSD's styling,
-timeout, and placement; it may appear on a different monitor from an explicitly
+`eDP-1 · 185%`. Use `--no-osd` to suppress it. Successful changes print nothing;
+running without arguments prints the current scale without showing an OSD.
+If the OSD service or qdbus is unavailable, the script warns without failing
+the scale command. Plasma controls the OSD's styling, timeout, and placement;
+it may appear on a different monitor from an explicitly
 selected `--output`.
 
 The default display comes from KWin's `org.kde.KWin.activeOutputName` D-Bus
@@ -51,8 +51,9 @@ Scale values are percentages. Signed values adjust the current scale: `+10`
 changes 175% to 185%, and `-5` changes 175% to 170%.
 Decimal values and an optional trailing `%` are accepted. KDE decides which
 scales the hardware supports and may round the result; the script reads back
-and prints the applied scale. Changes take effect immediately, with no automatic
-revert timer. Run the command with the previous percentage to restore it.
+the applied scale for verification and the OSD. Changes take effect immediately,
+with no automatic revert timer. Run the command with the previous percentage to
+restore it.
 
 Implementation references:
 
