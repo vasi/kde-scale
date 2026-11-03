@@ -2,25 +2,47 @@
 # KDE Plasma / Wayland display scaling. Only Ruby's standard library is needed.
 require 'json'
 require 'open3'
+require 'optparse'
 require 'shellwords'
 
-HELP = <<~TEXT
-  Usage: kde-scale [--no-osd] [--dry-run] [--output NAME|ID] [PERCENT|+POINTS|-POINTS]
+def parse_options(argv)
+  options = { osd: true, dry_run: false }
+  values = []
+  parser = OptionParser.new do |opts|
+    opts.banner = 'Usage: kde-scale [options] [PERCENT|+POINTS|-POINTS]'
+    opts.on('--output NAME', 'Select a display by name or ID') do |name|
+      raise OptionParser::InvalidArgument, 'output must be a display name or ID' if name.empty? || name.start_with?('-')
+      options[:output] = name
+    end
+    opts.on('--dry-run', 'Preview the change without applying it') { options[:dry_run] = true }
+    opts.on('--[no-]osd', 'Show Plasma OSD (default: enabled)') { |enabled| options[:osd] = enabled }
+    # Numeric switches let bare negative adjustments coexist with normal options.
+    opts.on('-[0-9]POINTS', 'Subtract percentage points, e.g. -5') { |value| values << "-#{value}" }
+    opts.on('-h', '--help', 'Show this help') { puts opts; exit }
+    opts.separator <<~TEXT
 
-  kde-scale 200             Set the current display to 200%
-  kde-scale +10             Add 10 percentage points (175% -> 185%)
-  kde-scale -5              Subtract 5 percentage points
-  kde-scale                Show the current display's scale
-  kde-scale --dry-run +10   Preview the change
-  kde-scale --no-osd +10    Change scale without the on-screen display
-  kde-scale --output DP-1 150
+      Examples:
+        kde-scale 200            Set the current display to 200%
+        kde-scale +10            Add 10 percentage points (175% -> 185%)
+        kde-scale -5             Subtract 5 percentage points
+        kde-scale                Show the current display's scale
+        kde-scale --no-osd +10    Change scale without the OSD
 
-  Requires KDE Plasma on Wayland, kscreen-doctor, and a qdbus executable
-  (qdbus6, qdbus-qt6, or qdbus). Use kscreen-doctor -o to list outputs.
-  The default is KWin's active output: pointer movement and window activation
-  both update it. With only one enabled display, qdbus is optional for scaling.
-  Successful changes show Plasma's native OSD unless --no-osd is specified.
-TEXT
+      Requires KDE Plasma on Wayland and kscreen-doctor. OSD and automatic
+      multi-display selection require qdbus6, qdbus-qt6, or qdbus.
+      The default display follows KWin's active output (pointer movement and
+      window activation). Use kscreen-doctor -o to list outputs.
+    TEXT
+  end
+  parser.order!(argv) { |value| values << value }
+  values.concat(argv) # Arguments after an explicit -- are positional too.
+  raise OptionParser::InvalidArgument, 'specify just one scale or adjustment' if values.size > 1
+  change = values.first
+  if change && !change.match?(/\A[+-]?\d+(?:\.\d+)?%?\z/)
+    raise OptionParser::InvalidArgument, "invalid scale or adjustment: #{change}"
+  end
+  options.merge(change: change&.delete_suffix('%'))
+end
 
 def executable(name)
   ENV.fetch('PATH', '').split(File::PATH_SEPARATOR).map { |dir| File.join(dir, name) }
@@ -58,30 +80,9 @@ rescue RuntimeError, SystemCallError => error
 end
 
 begin
-  target = nil
-  change = nil
-  dry_run = false
-  osd = true
-  until ARGV.empty?
-    arg = ARGV.shift
-    case arg
-    when '-h', '--help'
-      puts HELP
-      exit
-    when '--dry-run'
-      dry_run = true
-    when '--no-osd'
-      osd = false
-    when '--output'
-      target = ARGV.shift
-      raise '--output requires a display name or ID' if target.nil? || target.start_with?('-')
-    when /\A[+-]?\d+(?:\.\d+)?%?\z/
-      raise 'Specify just one scale or adjustment' if change
-      change = arg.delete_suffix('%')
-    else
-      raise "Unknown argument: #{arg}\n#{HELP}"
-    end
-  end
+  options = parse_options(ARGV)
+  target = options[:output]
+  change = options[:change]
 
   if ENV['XDG_SESSION_TYPE'] == 'x11'
     raise 'Per-display fractional scaling requires a KDE Wayland session'
@@ -115,7 +116,7 @@ begin
   raise 'The resulting scale must be finite and greater than zero' unless desired.finite? && desired.positive?
   id = Integer(display.fetch('id'))
   command = [doctor, "output.#{id}.scale.#{desired}"]
-  if dry_run
+  if options[:dry_run]
     puts "#{name}: #{percent(current)} -> #{percent(desired)}"
     puts Shellwords.join(command)
   else
@@ -128,8 +129,11 @@ begin
     if (actual - desired).abs > 0.01
       raise 'KDE did not apply the requested scale; check Display Configuration'
     end
-    show_osd(qdbus, name, actual) if osd
+    show_osd(qdbus, name, actual) if options[:osd]
   end
+rescue OptionParser::ParseError => error
+  warn "kde-scale: #{error.message}\nRun kde-scale --help for usage"
+  exit 1
 rescue RuntimeError, SystemCallError, JSON::ParserError, KeyError, ArgumentError, TypeError => error
   warn "kde-scale: #{error.message}"
   exit 1

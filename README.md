@@ -4,6 +4,7 @@ A standalone Ruby script for KDE Plasma on Wayland. Uses Ruby's standard library
 `kscreen-doctor`, and `qdbus6`, `qdbus-qt6`, or `qdbus` (whichever is installed).
 No gems are needed. With one enabled display, qdbus is optional for scaling;
 the on-screen display requires it.
+Command-line options and help are handled by Ruby's standard-library `OptionParser`.
 
 Run from this directory:
 
@@ -15,6 +16,7 @@ Run from this directory:
 ./kde-scale --dry-run +10
 ./kde-scale --no-osd +10  # Change scale without the on-screen display
 ./kde-scale --output eDP-1 150
+./kde-scale --help   # Show all options
 kscreen-doctor -o        # List display names and IDs
 ```
 
