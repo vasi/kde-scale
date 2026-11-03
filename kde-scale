@@ -90,8 +90,7 @@ def active_display_name(displays, qdbus)
   name
 end
 
-def select_display(doctor, qdbus, target)
-  displays = outputs(doctor)
+def select_display(displays, qdbus, target)
   raise 'No connected, enabled displays found; run this inside your KDE session' if displays.empty?
 
   target ||= active_display_name(displays, qdbus)
@@ -113,16 +112,69 @@ def target_scale(current, change)
   desired
 end
 
-def apply_scale(doctor, display, desired)
+def logical_size(display, scale)
+  # KScreen's size already accounts for rotation. Round logical edges up, as it does.
+  size = display.fetch('size')
+  %w[width height].map { |axis| (Integer(size.fetch(axis)) / scale).ceil }
+end
+
+def layout_positions(displays, display, desired)
+  return {} if displays.one?
+
+  width, height = logical_size(display, Float(display.fetch('scale')))
+  new_width, new_height = logical_size(display, desired)
+  dx, dy = new_width - width, new_height - height
+  return {} if dx.zero? && dy.zero?
+
+  origin = display.fetch('pos')
+  center_x = origin.fetch('x') + (width - 1) / 2
+  center_y = origin.fetch('y') + (height - 1) / 2
+  # Use Display Configuration's maintainSnapping rule: move outputs on the
+  # far side of the resized display by its change in logical width/height.
+  # https://github.com/KDE/kscreen/blob/v6.8.2/kcm/output_model.cpp#L1281-L1307
+  positions = displays.to_h do |other|
+    x, y = other.fetch('pos').values_at('x', 'y')
+    unless other.fetch('name') == display.fetch('name')
+      x += dx if x >= center_x
+      y += dy if y >= center_y
+    end
+    [other.fetch('name'), [x, y]]
+  end
+
+  # Keep the desktop's top-left at (0, 0), as Display Configuration does.
+  min_x = positions.values.map(&:first).min
+  min_y = positions.values.map(&:last).min
+  positions.transform_values { |x, y| [x - min_x, y - min_y] }
+end
+
+def apply_scale(doctor, displays, display, desired)
+  # KWin uses 1/120 increments. Send that scale so the planned sizes match it.
+  desired = (desired * 120).round / 120.0
   id = Integer(display.fetch('id'))
   name = display.fetch('name')
-  capture(doctor, "output.#{id}.scale.#{desired}")
+  positions = layout_positions(displays, display, desired)
+  commands = ["output.#{id}.scale.#{desired}"]
+  displays.each do |other|
+    position = positions[other.fetch('name')]
+    next if position.nil? || position == other.fetch('pos').values_at('x', 'y')
+
+    commands << "output.#{Integer(other.fetch('id'))}.position.#{position.join(',')}"
+  end
+  # Apply scale and positions together: never expose a temporary gap or overlap.
+  capture(doctor, *commands)
   # Read the compositor's actual value, including any rounding it applies.
-  updated = outputs(doctor).find { |item| item['name'] == name }
+  updated_displays = outputs(doctor)
+  updated = updated_displays.find { |item| item['name'] == name }
   raise "#{name} disappeared while applying the change" unless updated
   actual = Float(updated.fetch('scale'))
   if (actual - desired).abs > 0.01
     raise 'KDE did not apply the requested scale; check Display Configuration'
+  end
+  positions.each do |output_name, position|
+    output = updated_displays.find { |item| item['name'] == output_name }
+    unless output && output.fetch('pos').values_at('x', 'y') == position
+      raise "KDE did not apply the expected position for #{output_name}; check Display Configuration"
+    end
   end
   actual
 end
@@ -134,7 +186,8 @@ def main(argv)
   end
   doctor = executable('kscreen-doctor') or raise 'kscreen-doctor was not found in PATH'
   qdbus = %w[qdbus6 qdbus-qt6 qdbus].filter_map { |name| executable(name) }.first
-  display = select_display(doctor, qdbus, options[:output])
+  displays = outputs(doctor)
+  display = select_display(displays, qdbus, options[:output])
   current = Float(display.fetch('scale'))
   raise 'KScreen returned an invalid current scale' unless current.finite? && current.positive?
 
@@ -144,7 +197,7 @@ def main(argv)
   end
 
   desired = target_scale(current, options[:change])
-  actual = apply_scale(doctor, display, desired)
+  actual = apply_scale(doctor, displays, display, desired)
   show_osd(qdbus, display.fetch('name'), actual) if options[:osd]
 end
 
