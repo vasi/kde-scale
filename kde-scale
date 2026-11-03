@@ -8,6 +8,7 @@ require 'shellwords'
 def parse_options(argv)
   options = { osd: true, dry_run: false }
   values = []
+  help = nil
   parser = OptionParser.new do |opts|
     opts.banner = 'Usage: kde-scale [options] [PERCENT|+POINTS|-POINTS]'
     opts.on('--output NAME', 'Select a display by name or ID') do |name|
@@ -16,9 +17,7 @@ def parse_options(argv)
     end
     opts.on('--dry-run', 'Preview the change without applying it') { options[:dry_run] = true }
     opts.on('--[no-]osd', 'Show Plasma OSD (default: enabled)') { |enabled| options[:osd] = enabled }
-    # Accept bare negative adjustments, but omit this parser rule from help.
-    opts.define('-[0-9]POINTS') { |value| values << "-#{value}" }.short.clear
-    opts.on('-h', '--help', 'Show this help') { puts opts; exit }
+    opts.on('-h', '--help', 'Show this help') { puts help; exit }
     opts.separator <<~TEXT
 
       Examples:
@@ -27,6 +26,9 @@ def parse_options(argv)
         kde-scale -5     Subtract 5 percentage points
     TEXT
   end
+  # Generate help from user-facing options before adding the numeric parser rule.
+  help = parser.to_s
+  parser.on('-[0-9]POINTS') { |value| values << "-#{value}" }
   parser.order!(argv) { |value| values << value }
   values.concat(argv) # Arguments after an explicit -- are positional too.
   raise OptionParser::InvalidArgument, 'specify just one scale or adjustment' if values.size > 1
